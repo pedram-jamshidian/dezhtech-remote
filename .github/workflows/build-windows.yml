@@ -33,15 +33,20 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: rustfmt
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: 501db0f17ef6df184fcdbfbe0f87cde2313b6ab1
+      - name: Setup vcpkg with correct version
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg-new
+          cd C:\vcpkg-new
+          git checkout 501db0f17ef6df184fcdbfbe0f87cde2313b6ab1
+          .\bootstrap-vcpkg.bat
+          echo "VCPKG_ROOT=C:\vcpkg-new" >> $env:GITHUB_ENV
 
       - name: Install vcpkg dependencies
-        shell: bash
+        shell: pwsh
         run: |
-          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static-md
+          cd $env:GITHUB_WORKSPACE
+          C:\vcpkg-new\vcpkg install --triplet x64-windows-static-md
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static-md
 
