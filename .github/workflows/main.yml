@@ -1,0 +1,91 @@
+name: Build DezhTech Remote for Windows
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.22.3"
+  RUST_TOOLCHAIN: "1.75.0"
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: "rustfmt"
+      
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+        shell: pwsh
+      
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-windows-${{ hashFiles('**/vcpkg.json', '**/Cargo.toml') }}
+          restore-keys: |
+            vcpkg-windows-
+      
+      - name: Install vcpkg dependencies
+        run: |
+          C:\vcpkg\vcpkg install libvpx:x64-windows-static-md libyuv:x64-windows-static-md opus:x64-windows-static-md aom:x64-windows-static-md
+        shell: pwsh
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+      
+      - name: Install LLVM
+        run: |
+          choco install llvm -y
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
+        shell: pwsh
+      
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Flutter pub get
+        working-directory: flutter
+        run: flutter pub get
+      
+      - name: Build Rust library
+        run: |
+          cargo build --release --features flutter
+        shell: pwsh
+        env:
+          VCPKG_ROOT: C:\vcpkg
+      
+      - name: Build Flutter Windows
+        working-directory: flutter
+        run: flutter build windows --release
+      
+      - name: List output files
+        run: |
+          Get-ChildItem -Recurse flutter\build\windows\x64\runner\Release\
+        shell: pwsh
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DezhTech-Remote-Windows-x64
+          path: flutter/build/windows/x64/runner/Release/
+          retention-days: 30
