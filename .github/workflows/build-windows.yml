@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  FLUTTER_VERSION: "3.22.3"
+  FLUTTER_VERSION: "3.24.0"
   RUST_TOOLCHAIN: "1.75.0"
   LLVM_VERSION: "15.0.6"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
