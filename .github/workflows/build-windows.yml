@@ -2,123 +2,128 @@ name: Build DezhTech Remote - Windows Full
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
 
 env:
-  FLUTTER_VERSION: "3.24.0"
+  SCITER_RUST_VERSION: "1.75.0"
   RUST_VERSION: "1.75.0"
+  CARGO_NDK_VERSION: "3.1.2"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.0"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  CARGO_INCREMENTAL: "0"
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   build-windows:
+    name: Build Windows
     runs-on: windows-2022
-    
+
     steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Setup Rust
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt, clippy
 
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.4
 
-      - name: Cache vcpkg
-        uses: actions/cache@v4
+      - name: Setup vcpkg with GitHub Actions binary caching
+        uses: lukka/run-vcpkg@v11
         with:
-          path: |
-            vcpkg_installed
-          key: vcpkg-manifest-${{ hashFiles('vcpkg.json') }}-v1
-          restore-keys: |
-            vcpkg-manifest-
+          vcpkgGitCommitId: 120deac3062162151622ca4860575a33844ba10b
 
       - name: Install vcpkg dependencies
-        shell: pwsh
         run: |
-          # نمایش محتوای vcpkg.json
-          Write-Host "=== vcpkg.json content ===" -ForegroundColor Cyan
-          Get-Content vcpkg.json
-          
-          # در Manifest Mode فقط vcpkg install بدون آرگومان اجرا میشه
-          Write-Host "`n=== Installing vcpkg dependencies (Manifest Mode) ===" -ForegroundColor Cyan
-          C:\vcpkg\vcpkg install --triplet x64-windows-static-md
+          $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed" --triplet x64-windows-static-md
+        shell: bash
         env:
-          VCPKG_ROOT: C:\vcpkg
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static-md
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Flutter doctor
-        run: flutter doctor -v
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.LLVM_VERSION }}
 
       - name: Flutter pub get
         working-directory: flutter
         run: flutter pub get
 
-      - name: Install LLVM
-        shell: pwsh
-        run: |
-          # LLVM برای libclang نیاز هست
-          choco install llvm -y --version=15.0.7
-          echo "LIBCLANG_PATH=C:\Program Files\LLVM\lib" >> $env:GITHUB_ENV
+      - name: Restore bridge files
+        uses: aspect-build/bazel-lib/.github/actions/run_or_restore@v2.7.7
+        id: restore-bridge
+        with:
+          path: |
+            ./src/flutter_ffi.rs
+            ./flutter/lib/generated_bridge.dart
+            ./flutter/lib/generated_bridge.freezed.dart
+          key: bridge-${{ hashFiles('./src/bridge_generated.rs', './Cargo.lock', './flutter/pubspec.lock') }}
+          run: |
+            dart pub global activate ffigen
+            $env:FFIGEN_LLVM = "${{ env.LLVM_PATH }}"
+            flutter_rust_bridge_codegen --rust-input ./src/bridge_generated.rs --dart-output ./flutter/lib/generated_bridge.dart
 
       - name: Build Rust library
-        shell: pwsh
-        run: |
-          $env:VCPKG_ROOT = "C:\vcpkg"
-          $env:LIBCLANG_PATH = "C:\Program Files\LLVM\lib"
-          
-          Write-Host "=== Building Rust library ===" -ForegroundColor Cyan
-          cargo build --release --lib --features "flutter"
+        run: cargo build --lib --features "flutter" --release
         env:
-          VCPKG_ROOT: C:\vcpkg
-          LIBCLANG_PATH: C:\Program Files\LLVM\lib
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+          LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
 
       - name: Build Flutter Windows
         working-directory: flutter
-        shell: pwsh
-        run: |
-          Write-Host "=== Building Flutter Windows ===" -ForegroundColor Cyan
-          flutter build windows --release
+        run: flutter build windows --release
 
       - name: Prepare release package
         shell: pwsh
         run: |
-          $releasePath = "flutter\build\windows\x64\runner\Release"
-          $outputPath = "DezhTech-Remote-Windows"
-          
-          # ایجاد پوشه خروجی
-          New-Item -ItemType Directory -Path $outputPath -Force
-          
-          # کپی فایل‌های بیلد
-          Copy-Item -Path "$releasePath\*" -Destination $outputPath -Recurse -Force
-          
-          # اضافه کردن فایل نسخه
           $version = Get-Date -Format "yyyy.MM.dd"
-          Set-Content -Path "$outputPath\VERSION.txt" -Value "DezhTech Remote`nVersion: $version`nBuild: ${{ github.run_number }}"
+          $buildDir = "flutter/build/windows/x64/runner/Release"
+          $outputDir = "DezhTech-Remote-$version"
           
-          # ایجاد ZIP
-          Compress-Archive -Path "$outputPath\*" -DestinationPath "DezhTech-Remote-Windows.zip" -Force
+          New-Item -ItemType Directory -Path $outputDir -Force
+          Copy-Item -Path "$buildDir/*" -Destination $outputDir -Recurse -Force
           
-          Write-Host "=== Package created successfully ===" -ForegroundColor Green
-          Get-ChildItem $outputPath
+          # Create version file
+          @"
+          DezhTech Remote
+          Version: $version
+          Build: ${{ github.run_number }}
+          Commit: ${{ github.sha }}
+          "@ | Set-Content "$outputDir/VERSION.txt"
+          
+          Compress-Archive -Path "$outputDir/*" -DestinationPath "DezhTech-Remote-Windows-$version.zip"
 
-      - name: Upload artifact (folder)
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DezhTech-Remote-Windows-Folder
-          path: DezhTech-Remote-Windows/
-          retention-days: 30
-
-      - name: Upload artifact (ZIP)
-        uses: actions/upload-artifact@v4
-        with:
-          name: DezhTech-Remote-Windows-ZIP
-          path: DezhTech-Remote-Windows.zip
+          name: DezhTech-Remote-Windows
+          path: |
+            DezhTech-Remote-*.zip
+            flutter/build/windows/x64/runner/Release/
           retention-days: 30
