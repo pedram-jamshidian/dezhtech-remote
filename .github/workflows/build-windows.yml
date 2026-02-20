@@ -1,91 +1,123 @@
-name: Build DezhTech Remote for Windows
+name: Build DezhTech Remote - Windows Full
 
 on:
-  push:
-    branches: [ master, main ]
-  pull_request:
-    branches: [ master, main ]
   workflow_dispatch:
 
 env:
-  FLUTTER_VERSION: "3.22.3"
-  RUST_TOOLCHAIN: "1.75.0"
+  FLUTTER_VERSION: "3.24.0"
+  RUST_VERSION: "1.75.0"
+  VCPKG_COMMIT: "962e5e39f8a25f42522f51fffc574e05a3efd26b"
 
 jobs:
   build-windows:
-    name: Build Windows
-    runs-on: windows-latest
+    runs-on: windows-2022
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: "rustfmt"
-      
-      - name: Setup vcpkg
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
-          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-        shell: pwsh
-      
-      - name: Cache vcpkg packages
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup vcpkg cache
         uses: actions/cache@v4
         with:
-          path: C:\vcpkg\installed
-          key: vcpkg-windows-${{ hashFiles('**/vcpkg.json', '**/Cargo.toml') }}
+          path: |
+            C:\vcpkg\installed
+            C:\vcpkg\packages
+          key: vcpkg-windows-${{ env.VCPKG_COMMIT }}-v2
           restore-keys: |
             vcpkg-windows-
-      
+
       - name: Install vcpkg dependencies
-        run: |
-          C:\vcpkg\vcpkg install libvpx:x64-windows-static-md libyuv:x64-windows-static-md opus:x64-windows-static-md aom:x64-windows-static-md
         shell: pwsh
-      
+        run: |
+          cd C:\vcpkg
+          git pull
+          .\bootstrap-vcpkg.bat
+          .\vcpkg.exe integrate install
+          .\vcpkg.exe install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
+        env:
+          VCPKG_DEFAULT_TRIPLET: x64-windows-static
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: "stable"
-      
-      - name: Install LLVM
-        run: |
-          choco install llvm -y
-          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $env:GITHUB_ENV
-        shell: pwsh
-      
-      - name: Install Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      
-      - name: Flutter pub get
+          channel: stable
+          cache: true
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Install Flutter dependencies
         working-directory: flutter
         run: flutter pub get
-      
-      - name: Build Rust library
-        run: |
-          cargo build --release --features flutter
+
+      - name: Set vcpkg environment
         shell: pwsh
+        run: |
+          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+          echo "C:\vcpkg\installed\x64-windows-static\lib" >> $env:GITHUB_PATH
+
+      - name: Build Rust library
+        shell: pwsh
+        run: |
+          $env:VCPKG_ROOT = "C:\vcpkg"
+          cargo build --release --lib --features flutter
         env:
           VCPKG_ROOT: C:\vcpkg
-      
+
+      - name: Generate Flutter bridge
+        working-directory: flutter
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+        continue-on-error: true
+
       - name: Build Flutter Windows
         working-directory: flutter
         run: flutter build windows --release
-      
-      - name: List output files
-        run: |
-          Get-ChildItem -Recurse flutter\build\windows\x64\runner\Release\
+
+      - name: Prepare release package
         shell: pwsh
-      
-      - name: Upload artifact
+        run: |
+          $releasePath = "flutter\build\windows\x64\runner\Release"
+          
+          # Copy additional files if needed
+          if (Test-Path "libs\portable") {
+            Copy-Item -Path "libs\portable\*" -Destination $releasePath -Recurse -Force
+          }
+          
+          # Create version info
+          $version = Get-Date -Format "yyyy.MM.dd-HHmm"
+          Set-Content -Path "$releasePath\version.txt" -Value "DezhTech Remote v$version"
+
+      - name: Upload Release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DezhTech-Remote-Windows-x64
+          name: DezhTech-Remote-Windows-Release
           path: flutter/build/windows/x64/runner/Release/
+          retention-days: 30
+
+      - name: Create ZIP package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "flutter\build\windows\x64\runner\Release\*" -DestinationPath "DezhTech-Remote-Windows.zip"
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: DezhTech-Remote-Windows-ZIP
+          path: DezhTech-Remote-Windows.zip
           retention-days: 30
