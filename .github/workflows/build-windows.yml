@@ -2,20 +2,12 @@ name: Build DezhTech Remote - Windows Full
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - '**.md'
 
 env:
   RUST_VERSION: "1.75.0"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.0"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-  CARGO_INCREMENTAL: "0"
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
 
 jobs:
   build-windows:
@@ -33,17 +25,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: recursive    # ✅ اضافه شد
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          targets: x86_64-pc-windows-msvc
           components: rustfmt
-
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.4
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -53,7 +41,8 @@ jobs:
       - name: Install vcpkg dependencies
         shell: bash
         run: |
-          $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed" --triplet x64-windows-static-md
+          cd $GITHUB_WORKSPACE
+          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static-md
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static-md
 
@@ -84,30 +73,9 @@ jobs:
         working-directory: flutter
         run: flutter build windows --release
 
-      - name: Prepare release package
-        shell: pwsh
-        run: |
-          $version = Get-Date -Format "yyyy.MM.dd"
-          $buildDir = "flutter/build/windows/x64/runner/Release"
-          $outputDir = "DezhTech-Remote-$version"
-          
-          New-Item -ItemType Directory -Path $outputDir -Force
-          Copy-Item -Path "$buildDir/*" -Destination $outputDir -Recurse -Force
-          
-          @"
-          DezhTech Remote
-          Version: $version
-          Build: ${{ github.run_number }}
-          Commit: ${{ github.sha }}
-          "@ | Set-Content "$outputDir/VERSION.txt"
-          
-          Compress-Archive -Path "$outputDir/*" -DestinationPath "DezhTech-Remote-Windows-$version.zip"
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: DezhTech-Remote-Windows
-          path: |
-            DezhTech-Remote-*.zip
-            flutter/build/windows/x64/runner/Release/
+          path: flutter/build/windows/x64/runner/Release/
           retention-days: 30
