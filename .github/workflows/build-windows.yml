@@ -1,0 +1,66 @@
+name: Build DezhTech Remote for Windows
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:  # اجازه اجرای دستی
+
+env:
+  FLUTTER_VERSION: "3.22.3"
+  RUST_TOOLCHAIN: "1.75.0"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: "rustfmt"
+      
+      - name: Setup vcpkg with GitHub Actions cache
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "a1a1cbc986e4c1a653d288c8e1d39669e9315b7f"
+      
+      - name: Install vcpkg dependencies
+        run: |
+          $VCPKG_ROOT/vcpkg install libvpx:x64-windows-static-md libyuv:x64-windows-static-md opus:x64-windows-static-md aom:x64-windows-static-md
+        shell: bash
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: "stable"
+      
+      - name: Flutter pub get
+        working-directory: flutter
+        run: flutter pub get
+      
+      - name: Build rustdesk lib
+        run: |
+          python3 build.py --flutter --hwcodec
+        shell: bash
+      
+      - name: Build Flutter Windows
+        working-directory: flutter
+        run: flutter build windows --release
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DezhTech-Remote-Windows
+          path: flutter/build/windows/x64/runner/Release/
+          retention-days: 30
