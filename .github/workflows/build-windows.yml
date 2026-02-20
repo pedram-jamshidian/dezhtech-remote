@@ -1,4 +1,4 @@
-name: Build DezhTech Remote - Windows Full
+name: Build DezhTech Remote - Windows
 
 on:
   workflow_dispatch:
@@ -6,7 +6,6 @@ on:
 env:
   FLUTTER_VERSION: "3.24.0"
   RUST_VERSION: "1.75.0"
-  VCPKG_COMMIT: "962e5e39f8a25f42522f51fffc574e05a3efd26b"
 
 jobs:
   build-windows:
@@ -17,39 +16,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup vcpkg cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            C:\vcpkg\installed
-            C:\vcpkg\packages
-          key: vcpkg-windows-${{ env.VCPKG_COMMIT }}-v2
-          restore-keys: |
-            vcpkg-windows-
-
-      - name: Install vcpkg dependencies
-        shell: pwsh
-        run: |
-          cd C:\vcpkg
-          git pull
-          .\bootstrap-vcpkg.bat
-          .\vcpkg.exe integrate install
-          .\vcpkg.exe install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static aom:x64-windows-static
-        env:
-          VCPKG_DEFAULT_TRIPLET: x64-windows-static
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          components: rustfmt, clippy
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
         with:
-          workspaces: "."
+          path: |
+            vcpkg_installed
+            C:\vcpkg\downloads
+          key: vcpkg-manifest-win-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-manifest-win-
+
+      - name: Install vcpkg dependencies (Manifest Mode)
+        shell: pwsh
+        run: |
+          # در Manifest Mode فقط vcpkg install بدون آرگومان
+          C:\vcpkg\vcpkg install --triplet x64-windows-static-md
+        env:
+          VCPKG_ROOT: C:\vcpkg
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -58,66 +49,24 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter doctor
-        run: flutter doctor -v
-
-      - name: Install Flutter dependencies
+      - name: Flutter pub get
         working-directory: flutter
         run: flutter pub get
-
-      - name: Set vcpkg environment
-        shell: pwsh
-        run: |
-          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-          echo "C:\vcpkg\installed\x64-windows-static\lib" >> $env:GITHUB_PATH
 
       - name: Build Rust library
         shell: pwsh
         run: |
           $env:VCPKG_ROOT = "C:\vcpkg"
-          cargo build --release --lib --features flutter
-        env:
-          VCPKG_ROOT: C:\vcpkg
-
-      - name: Generate Flutter bridge
-        working-directory: flutter
-        run: |
-          dart run build_runner build --delete-conflicting-outputs
-        continue-on-error: true
+          $env:LIBCLANG_PATH = "C:\Program Files\LLVM\lib"
+          cargo build --release --lib --features "flutter"
 
       - name: Build Flutter Windows
         working-directory: flutter
         run: flutter build windows --release
 
-      - name: Prepare release package
-        shell: pwsh
-        run: |
-          $releasePath = "flutter\build\windows\x64\runner\Release"
-          
-          # Copy additional files if needed
-          if (Test-Path "libs\portable") {
-            Copy-Item -Path "libs\portable\*" -Destination $releasePath -Recurse -Force
-          }
-          
-          # Create version info
-          $version = Get-Date -Format "yyyy.MM.dd-HHmm"
-          Set-Content -Path "$releasePath\version.txt" -Value "DezhTech Remote v$version"
-
-      - name: Upload Release artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DezhTech-Remote-Windows-Release
+          name: DezhTech-Remote-Windows
           path: flutter/build/windows/x64/runner/Release/
-          retention-days: 30
-
-      - name: Create ZIP package
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "flutter\build\windows\x64\runner\Release\*" -DestinationPath "DezhTech-Remote-Windows.zip"
-
-      - name: Upload ZIP
-        uses: actions/upload-artifact@v4
-        with:
-          name: DezhTech-Remote-Windows-ZIP
-          path: DezhTech-Remote-Windows.zip
           retention-days: 30
