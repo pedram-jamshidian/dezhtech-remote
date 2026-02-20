@@ -1,4 +1,4 @@
-name: Build DezhTech Remote - Windows
+name: Build DezhTech Remote - Windows Full
 
 on:
   workflow_dispatch:
@@ -30,14 +30,19 @@ jobs:
         with:
           path: |
             vcpkg_installed
-            C:\vcpkg\downloads
-          key: vcpkg-manifest-win-${{ hashFiles('vcpkg.json') }}
-          restore-keys: vcpkg-manifest-win-
+          key: vcpkg-manifest-${{ hashFiles('vcpkg.json') }}-v1
+          restore-keys: |
+            vcpkg-manifest-
 
-      - name: Install vcpkg dependencies (Manifest Mode)
+      - name: Install vcpkg dependencies
         shell: pwsh
         run: |
-          # در Manifest Mode فقط vcpkg install بدون آرگومان
+          # نمایش محتوای vcpkg.json
+          Write-Host "=== vcpkg.json content ===" -ForegroundColor Cyan
+          Get-Content vcpkg.json
+          
+          # در Manifest Mode فقط vcpkg install بدون آرگومان اجرا میشه
+          Write-Host "`n=== Installing vcpkg dependencies (Manifest Mode) ===" -ForegroundColor Cyan
           C:\vcpkg\vcpkg install --triplet x64-windows-static-md
         env:
           VCPKG_ROOT: C:\vcpkg
@@ -49,24 +54,71 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Flutter doctor
+        run: flutter doctor -v
+
       - name: Flutter pub get
         working-directory: flutter
         run: flutter pub get
+
+      - name: Install LLVM
+        shell: pwsh
+        run: |
+          # LLVM برای libclang نیاز هست
+          choco install llvm -y --version=15.0.7
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\lib" >> $env:GITHUB_ENV
 
       - name: Build Rust library
         shell: pwsh
         run: |
           $env:VCPKG_ROOT = "C:\vcpkg"
           $env:LIBCLANG_PATH = "C:\Program Files\LLVM\lib"
+          
+          Write-Host "=== Building Rust library ===" -ForegroundColor Cyan
           cargo build --release --lib --features "flutter"
+        env:
+          VCPKG_ROOT: C:\vcpkg
+          LIBCLANG_PATH: C:\Program Files\LLVM\lib
 
       - name: Build Flutter Windows
         working-directory: flutter
-        run: flutter build windows --release
+        shell: pwsh
+        run: |
+          Write-Host "=== Building Flutter Windows ===" -ForegroundColor Cyan
+          flutter build windows --release
 
-      - name: Upload artifact
+      - name: Prepare release package
+        shell: pwsh
+        run: |
+          $releasePath = "flutter\build\windows\x64\runner\Release"
+          $outputPath = "DezhTech-Remote-Windows"
+          
+          # ایجاد پوشه خروجی
+          New-Item -ItemType Directory -Path $outputPath -Force
+          
+          # کپی فایل‌های بیلد
+          Copy-Item -Path "$releasePath\*" -Destination $outputPath -Recurse -Force
+          
+          # اضافه کردن فایل نسخه
+          $version = Get-Date -Format "yyyy.MM.dd"
+          Set-Content -Path "$outputPath\VERSION.txt" -Value "DezhTech Remote`nVersion: $version`nBuild: ${{ github.run_number }}"
+          
+          # ایجاد ZIP
+          Compress-Archive -Path "$outputPath\*" -DestinationPath "DezhTech-Remote-Windows.zip" -Force
+          
+          Write-Host "=== Package created successfully ===" -ForegroundColor Green
+          Get-ChildItem $outputPath
+
+      - name: Upload artifact (folder)
         uses: actions/upload-artifact@v4
         with:
-          name: DezhTech-Remote-Windows
-          path: flutter/build/windows/x64/runner/Release/
+          name: DezhTech-Remote-Windows-Folder
+          path: DezhTech-Remote-Windows/
+          retention-days: 30
+
+      - name: Upload artifact (ZIP)
+        uses: actions/upload-artifact@v4
+        with:
+          name: DezhTech-Remote-Windows-ZIP
+          path: DezhTech-Remote-Windows.zip
           retention-days: 30
