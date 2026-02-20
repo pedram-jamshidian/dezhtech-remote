@@ -1,0 +1,1 @@
+flutter build windows --release --no-tree-shake-icons
