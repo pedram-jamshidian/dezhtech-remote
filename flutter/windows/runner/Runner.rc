@@ -1,6 +1,7 @@
 // Microsoft Visual C++ generated resource script.
 //
 #pragma code_page(65001)
+
 #include "resource.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
@@ -83,19 +84,19 @@ VS_VERSION_INFO VERSIONINFO
 #endif
  FILEOS VOS__WINDOWS32
  FILETYPE VFT_APP
- FILESUBTYPE 0x0L
+ FILESUBTYPE VFT2_UNKNOWN
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Purslane Ltd" "\0"
-            VALUE "FileDescription", "RustDesk Remote Desktop" "\0"
+            VALUE "CompanyName", "DezhTech" "\0"
+            VALUE "FileDescription", "DezhTech Remote - Secure Remote Desktop" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "rustdesk" "\0"
-            VALUE "LegalCopyright", "Copyright © 2025 Purslane Ltd. All rights reserved." "\0"
-            VALUE "OriginalFilename", "rustdesk.exe" "\0"
-            VALUE "ProductName", "RustDesk" "\0"
+            VALUE "InternalName", "dezhtech-remote" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2024 DezhTech. All rights reserved." "\0"
+            VALUE "OriginalFilename", "dezhtech-remote.exe" "\0"
+            VALUE "ProductName", "DezhTech Remote" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
@@ -103,6 +104,17 @@ BEGIN
     BEGIN
         VALUE "Translation", 0x409, 1252
     END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// String Table
+//
+
+STRINGTABLE
+BEGIN
+    IDC_MYWINDOWCLASS       "FLUTTER_RUNNER_WIN32_WINDOW"
 END
 
 #endif    // English (United States) resources
