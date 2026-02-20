@@ -5,12 +5,12 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
-import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
-// import 'package:flutter/services.dart';
 
-import '../../common/shared_state.dart';
+// ===========================================================================
+// DezhTech Remote - Desktop Tab Page
+// ===========================================================================
 
 class DesktopTabPage extends StatefulWidget {
   const DesktopTabPage({Key? key}) : super(key: key);
@@ -18,102 +18,104 @@ class DesktopTabPage extends StatefulWidget {
   @override
   State<DesktopTabPage> createState() => _DesktopTabPageState();
 
-  static void onAddSetting(
-      {SettingsTabKey initialPage = SettingsTabKey.general}) {
+  static void onAddSetting({int initialPage = 0}) {
     try {
       DesktopTabController tabController = Get.find<DesktopTabController>();
-      tabController.add(TabInfo(
-          key: kTabLabelSettingPage,
-          label: kTabLabelSettingPage,
-          selectedIcon: Icons.build_sharp,
-          unselectedIcon: Icons.build_outlined,
-          page: DesktopSettingPage(
-            key: const ValueKey(kTabLabelSettingPage),
-            initialTabkey: initialPage,
-          )));
+      final index = tabController.state.value.tabs
+          .indexWhere((tab) => tab.key == kTabLabelSettingPage);
+      if (index >= 0) {
+        tabController.jumpTo(index);
+      } else {
+        tabController.add(TabInfo(
+            key: kTabLabelSettingPage,
+            label: kTabLabelSettingPage,
+            closable: true,
+            page: DesktopSettingPage(initialTabKey: SettingsTabKey.values[initialPage])));
+      }
     } catch (e) {
       debugPrintStack(label: '$e');
     }
   }
 }
 
-class _DesktopTabPageState extends State<DesktopTabPage> {
-  final tabController = DesktopTabController(tabType: DesktopTabType.main);
-
-  _DesktopTabPageState() {
-    RemoteCountState.init();
-    Get.put<DesktopTabController>(tabController);
-    tabController.add(TabInfo(
-        key: kTabLabelHomePage,
-        label: kTabLabelHomePage,
-        selectedIcon: Icons.home_sharp,
-        unselectedIcon: Icons.home_outlined,
-        closable: false,
-        page: DesktopHomePage(
-          key: const ValueKey(kTabLabelHomePage),
-        )));
-    if (bind.isIncomingOnly()) {
-      tabController.onSelected = (key) {
-        if (key == kTabLabelHomePage) {
-          windowManager.setSize(getIncomingOnlyHomeSize());
-          setResizable(false);
-        } else {
-          windowManager.setSize(getIncomingOnlySettingsSize());
-          setResizable(true);
-        }
-      };
-    }
-  }
+class _DesktopTabPageState extends State<DesktopTabPage>
+    with TickerProviderStateMixin, WindowListener {
+  final tabController = Get.put(DesktopTabController());
 
   @override
   void initState() {
     super.initState();
-    // HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+    tabController.add(TabInfo(
+        key: kTabLabelHomePage,
+        label: kTabLabelHomePage,
+        closable: false,
+        page: const DesktopHomePage()));
+    windowManager.addListener(this);
   }
-
-  /*
-  bool _handleKeyEvent(KeyEvent event) {
-    if (!mouseIn && event is KeyDownEvent) {
-      print('key down: ${event.logicalKey}');
-      shouldBeBlocked(_block, canBeBlocked);
-    }
-    return false; // allow it to propagate
-  }
-  */
 
   @override
   void dispose() {
-    // HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
-    Get.delete<DesktopTabController>();
-
+    windowManager.removeListener(this);
     super.dispose();
   }
 
   @override
+  void onWindowFocus() {
+    // Do something when window gets focus
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final tabWidget = Container(
+    // DezhTech Remote - Main Desktop Tab Container
+    return DragToResizeArea(
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: MyTheme.color(context).border ?? Colors.transparent),
+        ),
         child: Scaffold(
-            backgroundColor: Theme.of(context).colorScheme.background,
-            body: DesktopTab(
-              controller: tabController,
-              tail: Offstage(
-                offstage: bind.isIncomingOnly() || bind.isDisableSettings(),
-                child: ActionIcon(
-                  message: 'Settings',
-                  icon: IconFont.menu,
-                  onTap: DesktopTabPage.onAddSetting,
-                  isClose: false,
+          backgroundColor: Theme.of(context).colorScheme.background,
+          body: Column(
+            children: [
+              // Tab Bar - DezhTech Remote Style
+              DesktopTitleBar(
+                child: TabBar(
+                  controller: tabController.tabController,
+                  tabs: tabController.state.value.tabs.map((tab) {
+                    return Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(translate(tab.label)),
+                          if (tab.closable)
+                            InkWell(
+                              onTap: () => tabController.remove(tabController.state.value.tabs.indexOf(tab)),
+                              child: const Icon(Icons.close, size: 16),
+                            ).marginOnly(left: 8),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
               ),
-            )));
-    return isMacOS || kUseCompatibleUiMode
-        ? tabWidget
-        : Obx(
-            () => DragToResizeArea(
-              resizeEdgeSize: stateGlobal.resizeEdgeSize.value,
-              enableResizeEdges: windowManagerEnableResizeEdges,
-              child: tabWidget,
-            ),
-          );
+              // Tab Content
+              Expanded(
+                child: Obx(
+                  () => IndexedStack(
+                    index: tabController.state.value.selected,
+                    children: tabController.state.value.tabs.map((tab) => tab.page).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void onWindowClose() async {
+    await windowManager.hide();
+    super.onWindowClose();
   }
 }
