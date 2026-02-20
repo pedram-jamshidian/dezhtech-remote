@@ -146,7 +146,7 @@ const String kUseBothPasswords = "use-both-passwords";
 // Note: These are display constants. The actual app name comes from bind.mainGetAppNameSync()
 
 const String kAppHomePage = "https://dezhtech.com";
-const String kAppGitHubRepo = "https://github.com/AliDehbansiahkarbon/RustDesk-Flutter";
+const String kAppGitHubRepo = "https://github.com/pedram-jamshidian/dezhtech-remote";
 
 // Color Constants for DezhTech Remote Theme
 const Color kDezhTechPrimary = Color(0xFF2196F3);  // Blue
