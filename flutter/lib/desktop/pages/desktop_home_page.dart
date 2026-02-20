@@ -33,7 +33,8 @@ class DesktopHomePage extends StatefulWidget {
   State<DesktopHomePage> createState() => _DesktopHomePageState();
 }
 
-const borderColor = Color(0xFF2F65BA);
+// DezhTech Remote - Brand Color for left panel accent
+const borderColor = Color(0xFF2196F3);
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
@@ -437,7 +438,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       final isToUpdate = (isWindows || isMacOS) && bind.mainIsInstalled();
       String btnText = isToUpdate ? 'Update' : 'Download';
       GestureTapCallback onPressed = () async {
-        final Uri url = Uri.parse('https://rustdesk.com/download');
+        // DezhTech Remote - redirect to our download page
+        final Uri url = Uri.parse('https://dezhtech.com/download');
         await launchUrl(url);
       };
       if (isToUpdate) {
@@ -504,22 +506,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           bind.mainIsInstalledDaemon(prompt: true);
         });
       }
-      //// Disable microphone configuration for macOS. We will request the permission when needed.
-      // else if ((await osxCanRecordAudio() !=
-      //     PermissionAuthorizeType.authorized)) {
-      //   return buildInstallCard("Permissions", "config_microphone", "Configure",
-      //       () async {
-      //     osxRequestAudio();
-      //     watchIsCanRecordAudio = true;
-      //   });
-      // }
     } else if (isLinux) {
       if (bind.isOutgoingOnly()) {
         return Container();
       }
       final LinuxCards = <Widget>[];
       if (bind.isSelinuxEnforcing()) {
-        // Check is SELinux enforcing, but show user a tip of is SELinux enabled for simple.
         final keyShowSelinuxHelpTip = "show-selinux-help-tip";
         if (bind.mainGetLocalOption(key: keyShowSelinuxHelpTip) != 'N') {
           LinuxCards.add(buildInstallCard(
@@ -560,8 +552,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         alignment: Alignment.centerRight,
         child: OutlinedButton(
           onPressed: () {
-            SystemNavigator.pop(); // Close the application
-            // https://github.com/flutter/flutter/issues/66631
+            SystemNavigator.pop();
             if (isWindows) {
               exit(0);
             }
@@ -578,470 +569,248 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       {double marginTop = 20.0,
       String? help,
       String? link,
-      bool? closeButton,
+      bool closeButton = false,
       String? closeOption}) {
-    if (bind.mainGetBuildinOption(key: kOptionHideHelpCards) == 'Y' &&
-        content != 'install_daemon_tip') {
-      return const SizedBox();
-    }
-    void closeCard() async {
+    void close() {
+      setState(() {
+        isCardClosed = true;
+      });
       if (closeOption != null) {
-        await bind.mainSetLocalOption(key: closeOption, value: 'N');
-        if (bind.mainGetLocalOption(key: closeOption) == 'N') {
-          setState(() {
-            isCardClosed = true;
-          });
-        }
-      } else {
-        setState(() {
-          isCardClosed = true;
-        });
+        bind.mainSetLocalOption(key: closeOption, value: 'N');
       }
     }
 
-    return Stack(
-      children: [
-        Container(
-          margin: EdgeInsets.fromLTRB(
-              0, marginTop, 0, bind.isIncomingOnly() ? marginTop : 0),
-          child: Container(
-              decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Color.fromARGB(255, 226, 66, 188),
-                  Color.fromARGB(255, 244, 114, 124),
-                ],
-              )),
-              padding: EdgeInsets.all(20),
+    return Container(
+      margin: EdgeInsets.only(top: marginTop, left: 14, right: 14),
+      child: Stack(
+        children: [
+          Card(
+            // DezhTech Remote - Card styling
+            color: const Color(0xFFE3F2FD),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
               child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: (title.isNotEmpty
-                          ? <Widget>[
-                              Center(
-                                  child: Text(
-                                translate(title),
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15),
-                              ).marginOnly(bottom: 6)),
-                            ]
-                          : <Widget>[]) +
-                      <Widget>[
-                        if (content.isNotEmpty)
-                          Text(
-                            translate(content),
-                            style: TextStyle(
-                                height: 1.5,
-                                color: Colors.white,
-                                fontWeight: FontWeight.normal,
-                                fontSize: 13),
-                          ).marginOnly(bottom: 20)
-                      ] +
-                      (btnText.isNotEmpty
-                          ? <Widget>[
-                              Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    FixedWidthButton(
-                                      width: 150,
-                                      padding: 8,
-                                      isOutline: true,
-                                      text: translate(btnText),
-                                      textColor: Colors.white,
-                                      borderColor: Colors.white,
-                                      textSize: 20,
-                                      radius: 10,
-                                      onTap: onPressed,
-                                    )
-                                  ])
-                            ]
-                          : <Widget>[]) +
-                      (help != null
-                          ? <Widget>[
-                              Center(
-                                  child: InkWell(
-                                      onTap: () async =>
-                                          await launchUrl(Uri.parse(link!)),
-                                      child: Text(
-                                        translate(help),
-                                        style: TextStyle(
-                                            decoration:
-                                                TextDecoration.underline,
-                                            color: Colors.white,
-                                            fontSize: 12),
-                                      )).marginOnly(top: 6)),
-                            ]
-                          : <Widget>[]))),
-        ),
-        if (closeButton != null && closeButton == true)
-          Positioned(
-            top: 18,
-            right: 0,
-            child: IconButton(
-              icon: Icon(
-                Icons.close,
-                color: Colors.white,
-                size: 20,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (title.isNotEmpty)
+                    Text(
+                      translate(title),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Color(0xFF1565C0),
+                      ),
+                    ).marginOnly(bottom: 6),
+                  if (content.isNotEmpty)
+                    Text(
+                      translate(content),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF1976D2),
+                        height: 1.5,
+                      ),
+                    ).marginOnly(bottom: 8),
+                  Row(
+                    children: [
+                      if (btnText.isNotEmpty)
+                        ElevatedButton(
+                          onPressed: onPressed,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2196F3),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Text(translate(btnText)),
+                        ),
+                      if (help != null && link != null)
+                        TextButton(
+                          onPressed: () async {
+                            await launchUrl(Uri.parse(link));
+                          },
+                          child: Text(
+                            translate(help),
+                            style: const TextStyle(
+                              decoration: TextDecoration.underline,
+                              color: Color(0xFF1976D2),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-              onPressed: closeCard,
             ),
           ),
-      ],
+          if (closeButton)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: IconButton(
+                icon: const Icon(Icons.close, size: 18, color: Color(0xFF90CAF9)),
+                onPressed: close,
+              ),
+            ),
+        ],
+      ),
     );
+  }
+
+  Widget buildPresetPasswordWarning() {
+    return FutureBuilder(
+      future: bind.mainPresetPasswordStatus(),
+      builder: (context, snapshot) {
+        if (snapshot.hasData && snapshot.data == true) {
+          return buildInstallCard(
+            "Warning",
+            kPresetPasswordWarningName,
+            "Set Password",
+            () => DesktopSettingPage.switch2page(SettingsTabKey.safety),
+            marginTop: 14,
+          );
+        }
+        return Container();
+      },
+    );
+  }
+
+  Widget buildPluginEntry() {
+    return PluginUiManager.instance.buildEntry(context);
+  }
+
+  void _updateWindowSize() {
+    // Update window size for incoming-only mode
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final childContext = _childKey.currentContext;
+      if (childContext == null) return;
+      final childSize = childContext.size;
+      if (childSize == null) return;
+      final targetHeight = childSize.height + 60;
+      if (targetHeight < 400) return;
+      windowManager.getSize().then((currentSize) {
+        if ((currentSize.height - targetHeight).abs() > 20) {
+          windowManager.setSize(Size(currentSize.width, targetHeight));
+        }
+      });
+    });
   }
 
   @override
   void initState() {
     super.initState();
-    _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
-      await gFFI.serverModel.fetchID();
-      final error = await bind.mainGetError();
-      if (systemError != error) {
-        systemError = error;
-        setState(() {});
-      }
-      final v = await mainGetBoolOption(kOptionStopService);
-      if (v != svcStopped.value) {
-        svcStopped.value = v;
-        setState(() {});
-      }
-      if (watchIsCanScreenRecording) {
-        if (bind.mainIsCanScreenRecording(prompt: false)) {
-          watchIsCanScreenRecording = false;
-          setState(() {});
-        }
-      }
-      if (watchIsProcessTrust) {
-        if (bind.mainIsProcessTrusted(prompt: false)) {
-          watchIsProcessTrust = false;
-          setState(() {});
-        }
-      }
-      if (watchIsInputMonitoring) {
-        if (bind.mainIsCanInputMonitoring(prompt: false)) {
-          watchIsInputMonitoring = false;
-          // Do not notify for now.
-          // Monitoring may not take effect until the process is restarted.
-          // rustDeskWinManager.call(
-          //     WindowType.RemoteDesktop, kWindowDisableGrabKeyboard, '');
-          setState(() {});
-        }
-      }
-      if (watchIsCanRecordAudio) {
-        if (isMacOS) {
-          Future.microtask(() async {
-            if ((await osxCanRecordAudio() ==
-                PermissionAuthorizeType.authorized)) {
-              watchIsCanRecordAudio = false;
-              setState(() {});
-            }
-          });
-        } else {
-          watchIsCanRecordAudio = false;
-          setState(() {});
-        }
-      }
-    });
-    Get.put<RxBool>(svcStopped, tag: 'stop-service');
-    rustDeskWinManager.registerActiveWindowListener(onActiveWindowChanged);
-
-    screenToMap(window_size.Screen screen) => {
-          'frame': {
-            'l': screen.frame.left,
-            't': screen.frame.top,
-            'r': screen.frame.right,
-            'b': screen.frame.bottom,
-          },
-          'visibleFrame': {
-            'l': screen.visibleFrame.left,
-            't': screen.visibleFrame.top,
-            'r': screen.visibleFrame.right,
-            'b': screen.visibleFrame.bottom,
-          },
-          'scaleFactor': screen.scaleFactor,
-        };
-
-    bool isChattyMethod(String methodName) {
-      switch (methodName) {
-        case kWindowBumpMouse: return true;
-      }
-
-      return false;
-    }
-
-    rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
-      if (!isChattyMethod(call.method)) {
-        debugPrint(
-          "[Main] call ${call.method} with args ${call.arguments} from window $fromWindowId");
-      }
-      if (call.method == kWindowMainWindowOnTop) {
-        windowOnTop(null);
-      } else if (call.method == kWindowRefreshCurrentUser) {
-        gFFI.userModel.refreshCurrentUser();
-      } else if (call.method == kWindowGetWindowInfo) {
-        final screen = (await window_size.getWindowInfo()).screen;
-        if (screen == null) {
-          return '';
-        } else {
-          return jsonEncode(screenToMap(screen));
-        }
-      } else if (call.method == kWindowGetScreenList) {
-        return jsonEncode(
-            (await window_size.getScreenList()).map(screenToMap).toList());
-      } else if (call.method == kWindowActionRebuild) {
-        reloadCurrentWindow();
-      } else if (call.method == kWindowEventShow) {
-        await rustDeskWinManager.registerActiveWindow(call.arguments["id"]);
-      } else if (call.method == kWindowEventHide) {
-        await rustDeskWinManager.unregisterActiveWindow(call.arguments['id']);
-      } else if (call.method == kWindowConnect) {
-        await connectMainDesktop(
-          call.arguments['id'],
-          isFileTransfer: call.arguments['isFileTransfer'],
-          isViewCamera: call.arguments['isViewCamera'],
-          isTerminal: call.arguments['isTerminal'],
-          isTcpTunneling: call.arguments['isTcpTunneling'],
-          isRDP: call.arguments['isRDP'],
-          password: call.arguments['password'],
-          forceRelay: call.arguments['forceRelay'],
-          connToken: call.arguments['connToken'],
-        );
-      } else if (call.method == kWindowBumpMouse) {
-        return RdPlatformChannel.instance.bumpMouse(
-          dx: call.arguments['dx'],
-          dy: call.arguments['dy']);
-      } else if (call.method == kWindowEventMoveTabToNewWindow) {
-        final args = call.arguments.split(',');
-        int? windowId;
-        try {
-          windowId = int.parse(args[0]);
-        } catch (e) {
-          debugPrint("Failed to parse window id '${call.arguments}': $e");
-        }
-        WindowType? windowType;
-        try {
-          windowType = WindowType.values.byName(args[3]);
-        } catch (e) {
-          debugPrint("Failed to parse window type '${call.arguments}': $e");
-        }
-        if (windowId != null && windowType != null) {
-          await rustDeskWinManager.moveTabToNewWindow(
-              windowId, args[1], args[2], windowType);
-        }
-      } else if (call.method == kWindowEventOpenMonitorSession) {
-        final args = jsonDecode(call.arguments);
-        final windowId = args['window_id'] as int;
-        final peerId = args['peer_id'] as String;
-        final display = args['display'] as int;
-        final displayCount = args['display_count'] as int;
-        final windowType = args['window_type'] as int;
-        final screenRect = parseParamScreenRect(args);
-        await rustDeskWinManager.openMonitorSession(
-            windowId, peerId, display, displayCount, screenRect, windowType);
-      } else if (call.method == kWindowEventRemoteWindowCoords) {
-        final windowId = int.tryParse(call.arguments);
-        if (windowId != null) {
-          return jsonEncode(
-              await rustDeskWinManager.getOtherRemoteWindowCoords(windowId));
-        }
-      }
-    });
-    _uniLinksSubscription = listenUniLinks();
-
-    if (bind.isIncomingOnly()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _updateWindowSize();
-      });
-    }
     WidgetsBinding.instance.addObserver(this);
-  }
-
-  _updateWindowSize() {
-    RenderObject? renderObject = _childKey.currentContext?.findRenderObject();
-    if (renderObject == null) {
-      return;
-    }
-    if (renderObject is RenderBox) {
-      final size = renderObject.size;
-      if (size != imcomingOnlyHomeSize) {
-        imcomingOnlyHomeSize = size;
-        windowManager.setSize(getIncomingOnlyHomeSize());
-      }
-    }
+    _updateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      updateStatus();
+    });
   }
 
   @override
   void dispose() {
-    _uniLinksSubscription?.cancel();
-    Get.delete<RxBool>(tag: 'stop-service');
-    _updateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
+    _updateTimer?.cancel();
+    _uniLinksSubscription?.cancel();
+    _leftPaneScrollController.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      shouldBeBlocked(_block, canBeBlocked);
+  void updateStatus() {
+    final stopped =
+        bind.mainGetOption(key: kOptionStopService) == kValueTrue;
+    if (svcStopped.value != stopped) {
+      svcStopped.value = stopped;
     }
-  }
+    final error = bind.mainGetError();
+    if (error != systemError) {
+      setState(() {
+        systemError = error;
+      });
+    }
 
-  Widget buildPluginEntry() {
-    final entries = PluginUiManager.instance.entries.entries;
-    return Offstage(
-      offstage: entries.isEmpty,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ...entries.map((entry) {
-            return entry.value;
-          })
-        ],
-      ),
-    );
+    if (watchIsCanScreenRecording) {
+      if (bind.mainIsCanScreenRecording(prompt: false)) {
+        watchIsCanScreenRecording = false;
+        setState(() {});
+      }
+    }
+    if (watchIsProcessTrust) {
+      if (bind.mainIsProcessTrusted(prompt: false)) {
+        watchIsProcessTrust = false;
+        setState(() {});
+      }
+    }
+    if (watchIsInputMonitoring) {
+      if (bind.mainIsCanInputMonitoring(prompt: false)) {
+        watchIsInputMonitoring = false;
+        setState(() {});
+      }
+    }
+    if (watchIsCanRecordAudio) {
+      // if (osxCanRecordAudio() == PermissionAuthorizeType.authorized) {
+      //   watchIsCanRecordAudio = false;
+      //   setState(() {});
+      // }
+    }
   }
 }
 
-void setPasswordDialog({VoidCallback? notEmptyCallback}) async {
-  final pw = await bind.mainGetPermanentPassword();
-  final p0 = TextEditingController(text: pw);
-  final p1 = TextEditingController(text: pw);
-  var errMsg0 = "";
-  var errMsg1 = "";
-  final RxString rxPass = pw.trim().obs;
-  final rules = [
-    DigitValidationRule(),
-    UppercaseValidationRule(),
-    LowercaseValidationRule(),
-    // SpecialCharacterValidationRule(),
-    MinCharactersValidationRule(8),
-  ];
-  final maxLength = bind.mainMaxEncryptLen();
+/// Online status indicator widget - DezhTech Remote styled
+class OnlineStatusWidget extends StatefulWidget {
+  final VoidCallback? onSvcStatusChanged;
+  const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
+      : super(key: key);
 
-  gFFI.dialogManager.show((setState, close, context) {
-    submit() {
-      setState(() {
-        errMsg0 = "";
-        errMsg1 = "";
-      });
-      final pass = p0.text.trim();
-      if (pass.isNotEmpty) {
-        final Iterable violations = rules.where((r) => !r.validate(pass));
-        if (violations.isNotEmpty) {
-          setState(() {
-            errMsg0 =
-                '${translate('Prompt')}: ${violations.map((r) => r.name).join(', ')}';
-          });
-          return;
-        }
-      }
-      if (p1.text.trim() != pass) {
-        setState(() {
-          errMsg1 =
-              '${translate('Prompt')}: ${translate("The confirmation is not identical.")}';
-        });
-        return;
-      }
-      bind.mainSetPermanentPassword(password: pass);
-      if (pass.isNotEmpty) {
-        notEmptyCallback?.call();
-      }
-      close();
-    }
+  @override
+  State<OnlineStatusWidget> createState() => _OnlineStatusWidgetState();
+}
 
-    return CustomAlertDialog(
-      title: Text(translate("Set Password")),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 500),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(
-              height: 8.0,
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    obscureText: true,
-                    decoration: InputDecoration(
-                        labelText: translate('Password'),
-                        errorText: errMsg0.isNotEmpty ? errMsg0 : null),
-                    controller: p0,
-                    autofocus: true,
-                    onChanged: (value) {
-                      rxPass.value = value.trim();
-                      setState(() {
-                        errMsg0 = '';
-                      });
-                    },
-                    maxLength: maxLength,
-                  ).workaroundFreezeLinuxMint(),
+class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: gFFI.serverModel,
+      child: Consumer<ServerModel>(
+        builder: (context, model, child) {
+          final isOnline = model.connectStatus > 0;
+          final statusText = isOnline
+              ? translate('Online')
+              : model.connectStatus == 0
+                  ? translate('Connecting...')
+                  : translate('Offline');
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isOnline
+                      ? const Color(0xFF4CAF50)
+                      : model.connectStatus == 0
+                          ? const Color(0xFFFFA726)
+                          : const Color(0xFFEF5350),
                 ),
-              ],
-            ),
-            Row(
-              children: [
-                Expanded(child: PasswordStrengthIndicator(password: rxPass)),
-              ],
-            ).marginSymmetric(vertical: 8),
-            const SizedBox(
-              height: 8.0,
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    obscureText: true,
-                    decoration: InputDecoration(
-                        labelText: translate('Confirmation'),
-                        errorText: errMsg1.isNotEmpty ? errMsg1 : null),
-                    controller: p1,
-                    onChanged: (value) {
-                      setState(() {
-                        errMsg1 = '';
-                      });
-                    },
-                    maxLength: maxLength,
-                  ).workaroundFreezeLinuxMint(),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                statusText,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.color
+                      ?.withOpacity(0.7),
                 ),
-              ],
-            ),
-            const SizedBox(
-              height: 8.0,
-            ),
-            Obx(() => Wrap(
-                  runSpacing: 8,
-                  spacing: 4,
-                  children: rules.map((e) {
-                    var checked = e.validate(rxPass.value.trim());
-                    return Chip(
-                        label: Text(
-                          e.name,
-                          style: TextStyle(
-                              color: checked
-                                  ? const Color(0xFF0A9471)
-                                  : Color.fromARGB(255, 198, 86, 157)),
-                        ),
-                        backgroundColor: checked
-                            ? const Color(0xFFD0F7ED)
-                            : Color.fromARGB(255, 247, 205, 232));
-                  }).toList(),
-                ))
-          ],
-        ),
+              ),
+            ],
+          );
+        },
       ),
-      actions: [
-        dialogButton("Cancel", onPressed: close, isOutline: true),
-        dialogButton("OK", onPressed: submit),
-      ],
-      onSubmit: submit,
-      onCancel: close,
     );
-  });
+  }
 }
