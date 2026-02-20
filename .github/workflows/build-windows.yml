@@ -9,9 +9,7 @@ on:
       - '**.md'
 
 env:
-  SCITER_RUST_VERSION: "1.75.0"
   RUST_VERSION: "1.75.0"
-  CARGO_NDK_VERSION: "3.1.2"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.0"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
@@ -42,20 +40,20 @@ jobs:
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
-          components: rustfmt, clippy
+          components: rustfmt
 
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.4
 
-      - name: Setup vcpkg with GitHub Actions binary caching
+      - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: 120deac3062162151622ca4860575a33844ba10b
 
       - name: Install vcpkg dependencies
+        shell: bash
         run: |
           $VCPKG_ROOT/vcpkg install --x-install-root="$VCPKG_ROOT/installed" --triplet x64-windows-static-md
-        shell: bash
         env:
           VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static-md
 
@@ -75,24 +73,11 @@ jobs:
         working-directory: flutter
         run: flutter pub get
 
-      - name: Restore bridge files
-        uses: aspect-build/bazel-lib/.github/actions/run_or_restore@v2.7.7
-        id: restore-bridge
-        with:
-          path: |
-            ./src/flutter_ffi.rs
-            ./flutter/lib/generated_bridge.dart
-            ./flutter/lib/generated_bridge.freezed.dart
-          key: bridge-${{ hashFiles('./src/bridge_generated.rs', './Cargo.lock', './flutter/pubspec.lock') }}
-          run: |
-            dart pub global activate ffigen
-            $env:FFIGEN_LLVM = "${{ env.LLVM_PATH }}"
-            flutter_rust_bridge_codegen --rust-input ./src/bridge_generated.rs --dart-output ./flutter/lib/generated_bridge.dart
-
       - name: Build Rust library
-        run: cargo build --lib --features "flutter" --release
+        shell: pwsh
+        run: |
+          cargo build --lib --features "flutter" --release
         env:
-          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
           LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
 
       - name: Build Flutter Windows
@@ -109,7 +94,6 @@ jobs:
           New-Item -ItemType Directory -Path $outputDir -Force
           Copy-Item -Path "$buildDir/*" -Destination $outputDir -Recurse -Force
           
-          # Create version file
           @"
           DezhTech Remote
           Version: $version
