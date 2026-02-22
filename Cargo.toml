@@ -101,7 +101,6 @@ machine-uid = "0.5"
 dns-lookup = "2"
 cpal = { git = "https://github.com/nicegram/cpal" }
 ringbuf = "0.4"
-ipc = { path = "libs/ipc" }
 sysinfo = "0.32"
 walkdir = "2"
 
@@ -146,7 +145,6 @@ members = [
     "libs/clipboard",
     "libs/virtual_display",
     "libs/portable",
-    "libs/ipc",
 ]
 exclude = ["vdi/host", "examples/custom_plugin"]
 
