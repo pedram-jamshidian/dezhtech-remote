@@ -28,17 +28,9 @@ virtual_display_driver = ["virtual_display"]
 plugin_framework = []
 use_dasp = ["dasp"]
 flutter_texture_render = []
-flatpak = ["hbb_common/flatpak"]
-appimage = ["hbb_common/appimage"]
 cli = []
-with_rc = ["simple_rc"]
 flutter = ["flutter_rust_bridge"]
 vram = ["scrap/vram", "hwcodec"]
-unix-file-copy-paste = [
-    "dep:x11-clipboard",
-    "dep:x11rb",
-    "hbb_common/unix-file-copy-paste",
-]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -55,10 +47,10 @@ lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
 libc = "0.2"
-parity-tokio-ipc = { git = "https://github.com/aspect-build/parity-tokio-ipc" }
-flexi_logger = { version = "0.29", features = ["async", "use_chrono_for_offset"] }
+parity-tokio-ipc = { git = "https://github.com/rustdesk-org/parity-tokio-ipc" }
+flexi_logger = { version = "0.29", features = ["async"] }
 runas = "1.2"
-magnum-opus = { git = "https://github.com/nicegram/magnum-opus" }
+magnum-opus = { git = "https://github.com/rustdesk-org/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = "0.16"
 samplerate = "0.2"
@@ -89,17 +81,16 @@ fon = "0.6"
 zip = "2.3"
 shutdown_hooks = "0.1"
 totp-rs = { version = "5.0", default-features = false }
-pam = { git = "https://github.com/nicegram/pam", optional = true }
-simple_rc = { git = "https://github.com/nicegram/simple_rc", optional = true }
+pam = { git = "https://github.com/1wilkens/pam", optional = true }
 dlopen2 = "0.7"
-x11-clipboard = { git = "https://github.com/nicegram/x11-clipboard-fork", optional = true }
+x11-clipboard = { git = "https://github.com/clslaid/x11-clipboard", branch = "feat/store-batch", optional = true }
 x11rb = { version = "0.13", features = ["all-extensions"], optional = true }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
 machine-uid = "0.5"
 dns-lookup = "2"
-cpal = { git = "https://github.com/nicegram/cpal" }
+cpal = { git = "https://github.com/rustdesk-org/cpal", branch = "osx-screencapturekit" }
 ringbuf = "0.4"
 sysinfo = "0.32"
 walkdir = "2"
@@ -115,7 +106,7 @@ psimple = { package = "libpulse-simple-binding", version = "2" }
 psimple-sys = { package = "libpulse-simple-sys", version = "1.22" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-pam = { git = "https://github.com/nicegram/pam", optional = true }
+pam = { git = "https://github.com/1wilkens/pam", optional = true }
 users = { version = "0.11" }
 dbus = "0.9"
 dbus-crossroads = "0.5"
@@ -135,7 +126,6 @@ winapi = { version = "0.3", features = ["winuser", "wincrypt", "shellscalingapi"
 virtual_display = { path = "libs/virtual_display", optional = true }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-quarter_mouse = { git = "https://github.com/nicegram/quarter-mouse" }
 
 [workspace]
 members = [
