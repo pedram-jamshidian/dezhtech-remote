@@ -9,7 +9,7 @@ on:
 
 env:
   FLUTTER_VERSION: "3.22.3"
-  RUST_TOOLCHAIN: "1.75.0"
+  RUST_TOOLCHAIN: "1.85.0"
 
 jobs:
   build-windows:
