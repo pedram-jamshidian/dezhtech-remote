@@ -5,7 +5,7 @@ on:
 
 env:
   FLUTTER_VERSION: "3.24.0"
-  RUST_TOOLCHAIN: "1.85.0"
+  RUST_TOOLCHAIN: "1.88.0"
   LLVM_VERSION: "15.0.6"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
@@ -47,13 +47,24 @@ jobs:
         with:
           vcpkgGitCommitId: 120deac3062162151622ca4860575a33844ba10b
 
-      - name: Install vcpkg dependencies (manifest mode)
+      - name: Install vcpkg dependencies
         shell: bash
         run: |
           cd $GITHUB_WORKSPACE
-          $VCPKG_ROOT/vcpkg.exe install --triplet x64-windows-static-md --host-triplet x64-windows-static-md
+          $VCPKG_ROOT/vcpkg.exe install --triplet x64-windows-static --host-triplet x64-windows-static
         env:
-          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static-md
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+          VCPKG_DEFAULT_TRIPLET: x64-windows-static
+
+      - name: Verify vcpkg installation
+        shell: bash
+        run: |
+          echo "=== Checking installed packages ==="
+          ls -la "$VCPKG_ROOT/installed/" || echo "No installed dir"
+          ls -la "$VCPKG_ROOT/installed/x64-windows-static/" || echo "No x64-windows-static dir"
+          ls -la "$VCPKG_ROOT/installed/x64-windows-static/include/opus/" || echo "No opus headers"
+          ls -la "$VCPKG_ROOT/installed/x64-windows-static/lib/" || echo "No lib dir"
+          echo "=== VCPKG_ROOT = $VCPKG_ROOT ==="
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -74,9 +85,16 @@ jobs:
       - name: Build Rust library
         shell: pwsh
         run: |
+          # Set VCPKG environment variables for Rust build scripts
+          $env:VCPKG_ROOT = "$env:VCPKG_ROOT"
+          Write-Host "VCPKG_ROOT=$env:VCPKG_ROOT"
+          Write-Host "Checking opus headers..."
+          Get-ChildItem "$env:VCPKG_ROOT\installed\x64-windows-static\include\opus\" -ErrorAction SilentlyContinue
+          
           cargo build --lib --features "flutter" --release
         env:
           LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
 
       - name: Build Flutter Windows
         working-directory: flutter
