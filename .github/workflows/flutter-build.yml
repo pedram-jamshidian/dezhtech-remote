@@ -9,18 +9,17 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/vcpkg_cache,readwrite"
 
 jobs:
   build-windows:
     runs-on: windows-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
-      
+
       # ======================================
       # نصب ابزارها
       # ======================================
@@ -30,61 +29,54 @@ jobs:
           flutter-version: '3.24.0'
           channel: 'stable'
           cache: true
-      
+
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           targets: x86_64-pc-windows-msvc
-      
+
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "15.0"
           directory: ${{ github.workspace }}/llvm
-      
+
       # ======================================
-      # نصب vcpkg و وابستگی‌ها
+      # vcpkg - نصب از manifest
       # ======================================
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '962e5e39f8a25f42522f51fffc574e05a3efc4c6'
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
-          runVcpkgInstall: false
-      
-      - name: Cache vcpkg packages
+      - name: Cache vcpkg
         uses: actions/cache@v4
         with:
           path: |
-            ${{ github.workspace }}/vcpkg_cache
             ${{ github.workspace }}/vcpkg_installed
-          key: vcpkg-windows-x64-static-${{ hashFiles('vcpkg.json') }}
+            C:/vcpkg/downloads
+          key: vcpkg-win-static-md-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-windows-x64-static-
-      
-      - name: Install vcpkg dependencies
+            vcpkg-win-static-md-
+
+      - name: Install vcpkg dependencies (manifest mode)
         shell: pwsh
         run: |
-          $env:VCPKG_ROOT = "${{ github.workspace }}/vcpkg"
-          & "$env:VCPKG_ROOT/vcpkg.exe" install opus:x64-windows-static libvpx:x64-windows-static libyuv:x64-windows-static --triplet=x64-windows-static
+          Write-Host "=== vcpkg manifest install ==="
+          $env:VCPKG_ROOT = "C:\vcpkg"
           
-          # نمایش فایل‌های نصب شده
-          Write-Host "=== Installed files ==="
-          Get-ChildItem -Recurse "${{ github.workspace }}/vcpkg/installed/x64-windows-static/include" -ErrorAction SilentlyContinue | Select-Object FullName
-      
+          # نصب از vcpkg.json (manifest mode) - بدون نام پکیج
+          & C:\vcpkg\vcpkg.exe install --triplet x64-windows-static-md --x-install-root "${{ github.workspace }}/vcpkg_installed"
+          
+          Write-Host "=== Checking installed files ==="
+          Get-ChildItem -Recurse "${{ github.workspace }}/vcpkg_installed" -Filter "opus.h" -ErrorAction SilentlyContinue | Select-Object FullName
+          Get-ChildItem -Recurse "${{ github.workspace }}/vcpkg_installed" -Filter "opus.lib" -ErrorAction SilentlyContinue | Select-Object FullName
+
       # ======================================
-      # تنظیم متغیرهای محیطی
+      # متغیرهای محیطی
       # ======================================
       - name: Set environment variables
         shell: pwsh
         run: |
-          $vcpkgRoot = "${{ github.workspace }}/vcpkg"
-          $vcpkgInstalled = "$vcpkgRoot/installed/x64-windows-static"
+          $vcpkgInstalled = "${{ github.workspace }}/vcpkg_installed/x64-windows-static-md"
           
-          # تنظیم متغیرها
-          echo "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
-          echo "VCPKGRS_TRIPLET=x64-windows-static" >> $env:GITHUB_ENV
+          echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+          echo "VCPKGRS_TRIPLET=x64-windows-static-md" >> $env:GITHUB_ENV
           echo "VCPKGRS_DYNAMIC=0" >> $env:GITHUB_ENV
           
           echo "LIBCLANG_PATH=${{ github.workspace }}/llvm/bin" >> $env:GITHUB_ENV
@@ -93,38 +85,55 @@ jobs:
           echo "OPUS_INCLUDE_DIR=$vcpkgInstalled/include" >> $env:GITHUB_ENV
           echo "OPUS_LIB_DIR=$vcpkgInstalled/lib" >> $env:GITHUB_ENV
           
-          # اضافه به PATH
-          echo "$vcpkgInstalled/bin" >> $env:GITHUB_PATH
           echo "${{ github.workspace }}/llvm/bin" >> $env:GITHUB_PATH
           
           Write-Host "=== Environment configured ==="
-          Write-Host "VCPKG_ROOT: $vcpkgRoot"
           Write-Host "OPUS headers: $vcpkgInstalled/include"
-      
+
+      # ======================================
+      # بررسی پیش از بیلد
+      # ======================================
+      - name: Verify dependencies
+        shell: pwsh
+        run: |
+          Write-Host "=== Verification ==="
+          
+          $opusH = "${{ github.workspace }}/vcpkg_installed/x64-windows-static-md/include/opus/opus.h"
+          if (Test-Path $opusH) {
+              Write-Host "✓ opus.h found"
+          } else {
+              Write-Host "✗ opus.h NOT found at expected path"
+              Write-Host "Searching everywhere..."
+              Get-ChildItem -Recurse "${{ github.workspace }}/vcpkg_installed" -Filter "opus.h" -ErrorAction SilentlyContinue | Select-Object FullName
+          }
+          
+          # بررسی LLVM
+          if (Test-Path "${{ github.workspace }}/llvm/bin/clang.exe") {
+              Write-Host "✓ clang.exe found"
+          } else {
+              Write-Host "✗ clang.exe NOT found"
+          }
+          
+          rustc --version
+          cargo --version
+          flutter --version
+
       # ======================================
       # بیلد Rust
       # ======================================
       - name: Build Rust library
         shell: pwsh
         env:
-          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-          VCPKGRS_TRIPLET: x64-windows-static
+          VCPKG_ROOT: C:\vcpkg
+          VCPKGRS_TRIPLET: x64-windows-static-md
           VCPKGRS_DYNAMIC: "0"
           LIBCLANG_PATH: ${{ github.workspace }}/llvm/bin
+          OPUS_INCLUDE_DIR: ${{ github.workspace }}/vcpkg_installed/x64-windows-static-md/include
+          OPUS_LIB_DIR: ${{ github.workspace }}/vcpkg_installed/x64-windows-static-md/lib
         run: |
           Write-Host "=== Starting Rust build ==="
-          
-          # بررسی وجود هدرها
-          $opusHeader = "$env:VCPKG_ROOT/installed/x64-windows-static/include/opus/opus.h"
-          if (Test-Path $opusHeader) {
-              Write-Host "✓ opus.h found at: $opusHeader"
-          } else {
-              Write-Host "✗ opus.h NOT found!"
-              Get-ChildItem -Recurse "$env:VCPKG_ROOT/installed" -Filter "opus.h" | Select-Object FullName
-          }
-          
           cargo build --release --features hwcodec
-      
+
       # ======================================
       # بیلد Flutter
       # ======================================
@@ -134,7 +143,7 @@ jobs:
           flutter config --enable-windows-desktop
           flutter pub get
           flutter build windows --release
-      
+
       # ======================================
       # آپلود artifact
       # ======================================

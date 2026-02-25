@@ -1,0 +1,52 @@
+name: Build Flutter Windows (UI Only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, main ]
+
+jobs:
+  build-flutter-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.0"
+          channel: stable
+          cache: true
+
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      - name: Flutter pub get
+        working-directory: flutter
+        run: flutter pub get
+
+      - name: Build Windows (Release)
+        working-directory: flutter
+        run: flutter build windows --release
+        continue-on-error: true
+
+      - name: Build Windows (Debug fallback)
+        working-directory: flutter
+        run: flutter build windows --debug
+        continue-on-error: true
+
+      - name: Upload Release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DezhTech-Remote-Flutter-Release
+          path: flutter/build/windows/x64/runner/Release/
+          if-no-files-found: warn
+
+      - name: Upload Debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DezhTech-Remote-Flutter-Debug
+          path: flutter/build/windows/x64/runner/Debug/
+          if-no-files-found: warn

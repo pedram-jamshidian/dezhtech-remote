@@ -1,0 +1,92 @@
+name: Test Rust Build Only
+
+on:
+  workflow_dispatch:
+
+env:
+  RUST_TOOLCHAIN: "1.85.0"
+  LLVM_VERSION: "15.0.6"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+jobs:
+  test-rust:
+    name: Test Rust Build
+    runs-on: windows-2025
+
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Ensure submodules are up-to-date
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: rustfmt
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: 120deac3062162151622ca4860575a33844ba10b
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        run: |
+          $VCPKG_ROOT/vcpkg.exe install --triplet x64-windows-static --host-triplet x64-windows-static
+
+      - name: Debug - Show all vcpkg info
+        shell: pwsh
+        run: |
+          Write-Host "=== VCPKG_ROOT ==="
+          Write-Host $env:VCPKG_ROOT
+          
+          Write-Host "`n=== Installed packages ==="
+          & "$env:VCPKG_ROOT\vcpkg.exe" list
+          
+          Write-Host "`n=== Opus headers ==="
+          Get-ChildItem "$env:VCPKG_ROOT\installed" -Recurse -Filter "opus*" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          
+          Write-Host "`n=== All include dirs ==="
+          Get-ChildItem "$env:VCPKG_ROOT\installed\x64-windows-static\include" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }
+          
+          Write-Host "`n=== All lib files ==="
+          Get-ChildItem "$env:VCPKG_ROOT\installed\x64-windows-static\lib" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Build Rust library
+        shell: pwsh
+        run: |
+          Write-Host "=== Build Environment ==="
+          Write-Host "VCPKG_ROOT = $env:VCPKG_ROOT"
+          Write-Host "VCPKGRS_TRIPLET = $env:VCPKGRS_TRIPLET"
+          Write-Host "VCPKGRS_DYNAMIC = $env:VCPKGRS_DYNAMIC"
+          Write-Host "LIBCLANG_PATH = $env:LIBCLANG_PATH"
+          
+          rustc --version
+          cargo --version
+          
+          cargo build --lib --features "flutter" --release
+        env:
+          LIBCLANG_PATH: ${{ env.LLVM_PATH }}/lib
+          VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+          VCPKGRS_DYNAMIC: 0
+          VCPKGRS_TRIPLET: x64-windows-static
