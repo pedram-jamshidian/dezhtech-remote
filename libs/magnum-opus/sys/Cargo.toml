@@ -1,0 +1,20 @@
+[package]
+name = "magnum-opus-sys"
+version = "0.1.0"
+authors = ["RustDesk <info@rustdesk.com>"]
+edition = "2018"
+build = "build.rs"
+links = "opus"
+license = "MIT"
+description = "Bindings for libopus"
+repository = "https://github.com/rustdesk-org/magnum-opus"
+
+[features]
+default = []
+build-opus = ["cmake"]
+
+[build-dependencies]
+bindgen = "0.59"
+cc = "1.0"
+cmake = { version = "0.1", optional = true }
+pkg-config = "0.3"

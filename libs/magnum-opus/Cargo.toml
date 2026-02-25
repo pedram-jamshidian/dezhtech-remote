@@ -1,0 +1,22 @@
+[package]
+name = "magnum-opus"
+version = "0.4.0"
+authors = ["RustDesk <info@rustdesk.com>"]
+edition = "2018"
+license = "MIT"
+description = "Safe Rust bindings for libopus"
+repository = "https://github.com/rustdesk-org/magnum-opus"
+documentation = "https://docs.rs/magnum-opus"
+keywords = ["opus", "codec", "voice", "audio", "encoding"]
+categories = ["multimedia::audio", "multimedia::encoding"]
+
+[features]
+default = []
+build-opus = ["magnum-opus-sys/build-opus"]
+
+[dependencies]
+libc = "0.2"
+magnum-opus-sys = { version = "0.1", path = "sys" }
+
+[dev-dependencies]
+lazy_static = "1"
