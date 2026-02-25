@@ -3,9 +3,17 @@ use std::path::PathBuf;
 
 fn main() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let target = env::var("TARGET").unwrap();
+    let is_windows = target.contains("windows");
+    
+    // ======================================
+    // مرحله ۱: پیدا کردن کتابخانه opus
+    // ======================================
+    let mut include_paths: Vec<PathBuf> = Vec::new();
     
     #[cfg(feature = "build-opus")]
     {
+        // ساخت opus از سورس با cmake
         let mut config = cmake::Config::new("opus");
         config.define("BUILD_SHARED_LIBS", "OFF");
         config.define("OPUS_BUILD_PROGRAMS", "OFF");
@@ -14,91 +22,150 @@ fn main() {
         
         println!("cargo:rustc-link-search=native={}/lib", dst.display());
         println!("cargo:rustc-link-lib=static=opus");
+        include_paths.push(dst.join("include"));
     }
     
     #[cfg(not(feature = "build-opus"))]
     {
-        pkg_config::Config::new()
-            .atleast_version("1.1")
-            .probe("opus")
-            .unwrap();
+        if is_windows {
+            // ویندوز: استفاده از vcpkg
+            find_opus_windows(&mut include_paths);
+        } else {
+            // لینوکس/مک: استفاده از pkg-config
+            find_opus_unix(&mut include_paths);
+        }
     }
     
+    // ======================================
+    // مرحله ۲: تولید bindings با bindgen
+    // ======================================
+    generate_bindings(&out_path, &include_paths);
+}
+
+/// پیدا کردن opus در ویندوز با vcpkg
+#[cfg(not(feature = "build-opus"))]
+fn find_opus_windows(include_paths: &mut Vec<PathBuf>) {
+    println!("cargo:info=Searching for opus via vcpkg on Windows...");
+    
+    // تلاش اول: vcpkg crate
+    if let Ok(lib) = vcpkg::find_package("opus") {
+        println!("cargo:info=Found opus via vcpkg crate");
+        for path in &lib.include_paths {
+            println!("cargo:info=Include path: {}", path.display());
+            include_paths.push(path.clone());
+        }
+        return;
+    }
+    
+    // تلاش دوم: مسیرهای دستی vcpkg
+    let vcpkg_paths = [
+        // GitHub Actions با VCPKG_ROOT
+        env::var("VCPKG_ROOT").ok().map(|r| PathBuf::from(r).join("installed/x64-windows-static")),
+        // مسیر vcpkg_installed در پروژه
+        Some(PathBuf::from("vcpkg_installed/x64-windows-static")),
+        Some(PathBuf::from("vcpkg_installed/x64-windows")),
+        // مسیرهای معمول
+        Some(PathBuf::from("C:/vcpkg/installed/x64-windows-static")),
+        Some(PathBuf::from("C:/vcpkg/installed/x64-windows")),
+    ];
+    
+    for path_opt in vcpkg_paths.iter() {
+        if let Some(base_path) = path_opt {
+            let include_dir = base_path.join("include");
+            let lib_dir = base_path.join("lib");
+            
+            if include_dir.join("opus/opus.h").exists() || include_dir.join("opus.h").exists() {
+                println!("cargo:info=Found opus at: {}", base_path.display());
+                println!("cargo:rustc-link-search=native={}", lib_dir.display());
+                println!("cargo:rustc-link-lib=static=opus");
+                include_paths.push(include_dir);
+                return;
+            }
+        }
+    }
+    
+    // تلاش سوم: متغیر OPUS_INCLUDE_DIR
+    if let Ok(opus_include) = env::var("OPUS_INCLUDE_DIR") {
+        let include_dir = PathBuf::from(&opus_include);
+        if include_dir.exists() {
+            println!("cargo:info=Using OPUS_INCLUDE_DIR: {}", opus_include);
+            include_paths.push(include_dir);
+            
+            if let Ok(opus_lib) = env::var("OPUS_LIB_DIR") {
+                println!("cargo:rustc-link-search=native={}", opus_lib);
+            }
+            println!("cargo:rustc-link-lib=static=opus");
+            return;
+        }
+    }
+    
+    panic!(
+        "Could not find opus library!\n\
+        Please ensure vcpkg is properly configured:\n\
+        1. Set VCPKG_ROOT environment variable\n\
+        2. Run: vcpkg install opus:x64-windows-static\n\
+        3. Or set OPUS_INCLUDE_DIR and OPUS_LIB_DIR"
+    );
+}
+
+/// پیدا کردن opus در لینوکس/مک با pkg-config
+#[cfg(not(feature = "build-opus"))]
+fn find_opus_unix(include_paths: &mut Vec<PathBuf>) {
+    println!("cargo:info=Searching for opus via pkg-config...");
+    
+    match pkg_config::Config::new().atleast_version("1.1").probe("opus") {
+        Ok(lib) => {
+            println!("cargo:info=Found opus via pkg-config");
+            for path in lib.include_paths {
+                include_paths.push(path);
+            }
+        }
+        Err(e) => {
+            panic!(
+                "Could not find opus via pkg-config: {}\n\
+                Please install libopus-dev:\n\
+                  Ubuntu/Debian: sudo apt install libopus-dev\n\
+                  Fedora: sudo dnf install opus-devel\n\
+                  macOS: brew install opus",
+                e
+            );
+        }
+    }
+}
+
+/// تولید bindings با bindgen
+fn generate_bindings(out_path: &PathBuf, include_paths: &[PathBuf]) {
     println!("cargo:rerun-if-changed=wrapper.h");
     
-    let bindings = bindgen::Builder::default()
+    let mut builder = bindgen::Builder::default()
         .header("wrapper.h")
         .allowlist_function("opus_.*")
         .allowlist_type("Opus.*")
         .allowlist_var("OPUS_.*")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        .parse_callbacks(Box::new(OpusCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+    
+    // اضافه کردن مسیرهای include
+    for path in include_paths {
+        let clang_arg = format!("-I{}", path.display());
+        println!("cargo:info=Adding clang arg: {}", clang_arg);
+        builder = builder.clang_arg(&clang_arg);
+    }
+    
+    // مسیرهای اضافی برای ویندوز
+    if env::var("TARGET").unwrap().contains("windows") {
+        if let Ok(vcpkg_root) = env::var("VCPKG_ROOT") {
+            let extra_include = format!("-I{}/installed/x64-windows-static/include", vcpkg_root);
+            builder = builder.clang_arg(&extra_include);
+        }
+    }
+    
+    let bindings = builder
         .generate()
         .expect("Unable to generate bindings");
     
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
-}
-
-#[derive(Debug)]
-struct OpusCallbacks;
-
-impl bindgen::callbacks::ParseCallbacks for OpusCallbacks {
-    fn item_name(&self, original_item_name: &str) -> Option<String> {
-        patch_missing_constants(original_item_name)
-    }
-}
-
-fn patch_missing_constants(name: &str) -> Option<String> {
-    // Constants that may be missing in some versions
-    let constants = [
-        ("OPUS_OK", 0),
-        ("OPUS_BAD_ARG", -1),
-        ("OPUS_BUFFER_TOO_SMALL", -2),
-        ("OPUS_INTERNAL_ERROR", -3),
-        ("OPUS_INVALID_PACKET", -4),
-        ("OPUS_UNIMPLEMENTED", -5),
-        ("OPUS_INVALID_STATE", -6),
-        ("OPUS_ALLOC_FAIL", -7),
-        
-        ("OPUS_APPLICATION_VOIP", 2048),
-        ("OPUS_APPLICATION_AUDIO", 2049),
-        ("OPUS_APPLICATION_RESTRICTED_LOWDELAY", 2051),
-        
-        ("OPUS_SIGNAL_VOICE", 3001),
-        ("OPUS_SIGNAL_MUSIC", 3002),
-        
-        ("OPUS_BANDWIDTH_NARROWBAND", 1101),
-        ("OPUS_BANDWIDTH_MEDIUMBAND", 1102),
-        ("OPUS_BANDWIDTH_WIDEBAND", 1103),
-        ("OPUS_BANDWIDTH_SUPERWIDEBAND", 1104),
-        ("OPUS_BANDWIDTH_FULLBAND", 1105),
-        
-        ("OPUS_FRAMESIZE_ARG", 5000),
-        ("OPUS_FRAMESIZE_2_5_MS", 5001),
-        ("OPUS_FRAMESIZE_5_MS", 5002),
-        ("OPUS_FRAMESIZE_10_MS", 5003),
-        ("OPUS_FRAMESIZE_20_MS", 5004),
-        ("OPUS_FRAMESIZE_40_MS", 5005),
-        ("OPUS_FRAMESIZE_60_MS", 5006),
-        ("OPUS_FRAMESIZE_80_MS", 5007),
-        ("OPUS_FRAMESIZE_100_MS", 5008),
-        ("OPUS_FRAMESIZE_120_MS", 5009),
-        
-        // Control codes
-        ("OPUS_SET_PHASE_INVERSION_DISABLED_REQUEST", 4046),
-        ("OPUS_GET_PHASE_INVERSION_DISABLED_REQUEST", 4047),
-        ("OPUS_GET_IN_DTX_REQUEST", 4049),
-    ];
     
-    // Check if this constant needs patching
-    for (const_name, _value) in &constants {
-        if name == *const_name {
-            // Don't rename, bindgen will handle it
-            return None;
-        }
-    }
-    
-    None
+    println!("cargo:info=Successfully generated bindings.rs");
 }
